@@ -190,25 +190,35 @@ function buildTowers() {
 }
 
 function buildGateways() {
-	var oils = countStructList(structures.derricks);
-	if (oils <= 0)
-		return BUILDRET.FAILURE;
-	var gates = enumGateways().filter(function(gate) {
-		var l = gate.x1 - gate.x2 + gate.y1 - gate.y2;
-		if (l < 0)
-			l = -l;
-		var cnt = enumRange(gate.x1, gate.y1, l, ALLIES).filterProperty("stattype", DEFENSE).length;
-		cnt    += enumRange(gate.x2, gate.y2, l, ALLIES).filterProperty("stattype", DEFENSE).length;
-		cnt    -= enumRange(gate.x1, gate.y1, l, ENEMIES).filterProperty("stattype", DEFENSE).length;
-		cnt    -= enumRange(gate.x2, gate.y2, l, ENEMIES).filterProperty("stattype", DEFENSE).length;
-		return cnt >= 0 && (cnt < l || (personality.defensiveness === 100 && withChance(70))); // turtle AI needs to keep building towers
-	}).sort(function(one, two) { return distanceToBase({x: one.x1, y: one.y1}) - distanceToBase({x: two.x1, y: two.y1}); });
-	if (gates.length === 0)
-		return;
-	if (withChance(50))
-		return buildStructureAround(chooseDefense(DEFROLE.GATEWAY), {x: gates[0].x1, y: gates[0].y1}) !== BUILDRET.UNAVAILABLE;
-	else
-		return buildStructureAround(chooseDefense(DEFROLE.GATEWAY), {x: gates[0].x2, y: gates[0].y2}) !== BUILDRET.UNAVAILABLE;
+	function uncached() {
+		var oils = countStructList(structures.derricks);
+		if (oils <= 0)
+			return BUILDRET.FAILURE;
+		// lets not cycle through all gateways on the map 
+		var gates = whereAreTheGateways();
+		//gates = gates.filter(function(gate) {
+		//	return distanceToBase({x: (gate.x1+gate.x2)/2,y: (gate.y1+gate.y2)/2}) < 3 * baseScale;
+		//	});
+		if (gates.length === 0)
+			return BUILDRET.FAILURE;
+		var gates = gates.filter(function(gate) {
+			var l = gate.x1 - gate.x2 + gate.y1 - gate.y2;
+			if (l < 0)
+				l = -l;
+			var cnt = enumRange(gate.x1, gate.y1, l, ALLIES).filterProperty("stattype", DEFENSE).length;
+			cnt    += enumRange(gate.x2, gate.y2, l, ALLIES).filterProperty("stattype", DEFENSE).length;
+			cnt    -= enumRange(gate.x1, gate.y1, l, ENEMIES).filterProperty("stattype", DEFENSE).length;
+			cnt    -= enumRange(gate.x2, gate.y2, l, ENEMIES).filterProperty("stattype", DEFENSE).length;
+			return cnt >= 0 && (cnt < l || (personality.defensiveness === 100 && withChance(70))); // turtle AI needs to keep building towers
+		}).sort(function(one, two) { return distanceToBase({x: one.x1, y: one.y1}) - distanceToBase({x: two.x1, y: two.y1}); });
+		if (gates.length === 0)
+			return BUILDRET.FAILURE;
+		if (withChance(50))
+			return buildStructureAround(chooseDefense(DEFROLE.GATEWAY), {x: gates[0].x1, y: gates[0].y1}) !== BUILDRET.UNAVAILABLE;
+		else
+			return buildStructureAround(chooseDefense(DEFROLE.GATEWAY), {x: gates[0].x2, y: gates[0].y2}) !== BUILDRET.UNAVAILABLE;
+	}
+	return cached(uncached, 200);
 }
 
 function buildArty() {
@@ -315,11 +325,11 @@ function buildExtras() {
 _global.buildDefenses = function() {
 	if (chooseObjectType() !== 2)
 		return false;
-	if (withChance(33)) {
-		if (buildTowers()) // includes sensor towers and forts
+	if (withChance(33) && areThereGW() === true) {
+		if (buildGateways()) 
 			return true;
 	} else if (withChance(50)) {
-		if (buildGateways())
+		if (buildTowers()) // includes sensor towers and forts
 			return true;
 	} else
 		if (buildArty())
